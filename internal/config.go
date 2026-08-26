@@ -1,4 +1,4 @@
-package Config
+package config
 
 import (
 	"encoding/json"
@@ -7,8 +7,8 @@ import (
 )
 
 type Config struct {
-	url       string `json:"db_url"`
-	current_user_name string `json:"current_user_name"`
+	Url       string `json:"db_url"`
+	Current_user_name string `json:"current_user_name"`
 }
 
 func getConfigPath() (string, error) {
@@ -63,6 +63,7 @@ func Write(cfg Config) error {
 	return nil
 }
 
-func (c Config) SetUser(user string) {
-	c.current_user_name = user
+func (c *Config) SetUser(user string) {
+	c.Current_user_name = user
+
 }

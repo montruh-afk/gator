@@ -3,13 +3,14 @@ package main
 import (
 	"fmt"
 
-	"github.com/montruh-afk/gator/internal/Config"
+	"github.com/montruh-afk/gator/internal"
 )
 
 func main() {
-	data, err := Config.Read()
+	data, err := config.Read()
 	if err != nil {
-		fmt.Errorf("Something went wrong: %v", err)
+		fmt.Printf("Something went wrong: %v", err)
 	}
 	data.SetUser("montruh")
+	fmt.Println(data)
 }
