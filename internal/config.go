@@ -1,4 +1,4 @@
-package config
+package internal
 
 import (
 	"encoding/json"
@@ -63,7 +63,7 @@ func Write(cfg Config) error {
 	return nil
 }
 
-func (c *Config) SetUser(user string) {
+func (c *Config) SetUser(user string) error {
 	c.Current_user_name = user
-
+	return Write(*c)
 }
