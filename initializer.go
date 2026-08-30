@@ -8,8 +8,9 @@ import (
 )
 
 
-func repl(state *internal.State, cmd *internal.Commands) {
+func start(state *internal.State, cmd *internal.Commands) {
 	cmd.Register("login", internal.HandlerLogin)
+	cmd.Register("register", internal.Register)
 	checker(state, cmd)
 }
 
