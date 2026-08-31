@@ -13,6 +13,7 @@ func start(state *internal.State, cmd *internal.Commands) {
 	cmd.Register("register", internal.Register)
 	cmd.Register("reset", internal.Reset)
 	cmd.Register("users", internal.Users)
+	cmd.Register("agg", internal.Agg)
 	checker(state, cmd)
 }
 

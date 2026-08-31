@@ -18,7 +18,6 @@ func (c *Commands) Run(s *State, cmd Command) error {
 func (c *Commands) Register(name string, f func(*State, Command) error) {
 	if _, ok := c.Handlers[name]; ok {
 		fmt.Printf("Operation nullified: %s is a process still in service\n", name)
-		return
 	} else {
 		c.Handlers[name] = f
 	}

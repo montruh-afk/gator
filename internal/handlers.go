@@ -3,10 +3,11 @@ package internal
 import (
 	"context"
 	"fmt"
-	"time"
 	"os"
+	"time"
 	"github.com/google/uuid"
 	"github.com/montruh-afk/gator/internal/database"
+	"github.com/montruh-afk/gator/internal/network"
 )
 
 type Command struct {
@@ -103,5 +104,14 @@ func Users(s *State, cmd Command) error {
 		
 	}
 
+	return nil
+}
+
+func Agg(s *State, cmd Command) error {
+	feed, err := network.Fetchfeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return err
+	}
+	fmt.Println(feed)
 	return nil
 }
