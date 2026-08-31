@@ -71,3 +71,37 @@ func Register(s *State, cmd Command) error {
 
 	return nil
 }
+
+func Reset(s *State, cmd Command) error {
+	if len(cmd.Args) > 0 {
+		fmt.Println("Reset must be called with no arguments")
+		os.Exit(1)
+	}
+	if err := s.Db.DeleteUsers(context.Background()); err != nil {
+		fmt.Println("Something went wrong\n\t", err)
+		os.Exit(1)
+	}
+	s.Configuration.Current_user_name = ""
+	fmt.Println("Operation successful")
+	return nil
+}
+
+func Users(s *State, cmd Command) error {
+	users, err := s.Db.GetUsers(context.Background())
+	if err != nil {
+		fmt.Println("Something went wrong", err)
+		os.Exit(1)
+	}
+
+	current := s.Configuration.Current_user_name
+	for _, user := range users {
+		if user.Name == current {
+			fmt.Println("*", user.Name, "(current)")
+		} else{
+			fmt.Println("*", user.Name)
+		}
+		
+	}
+
+	return nil
+}
