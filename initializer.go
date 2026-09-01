@@ -14,12 +14,19 @@ func start(state *internal.State, cmd *internal.Commands) {
 	cmd.Register("reset", internal.Reset)
 	cmd.Register("users", internal.Users)
 	cmd.Register("agg", internal.Agg)
-	checker(state, cmd)
+	cmd.Register("addfeed", internal.AddFeed)
+	if err := checker(state, cmd); err != nil {
+		fmt.Print(err)
+		os.Exit(1)
+	}
 }
 
 func checker(state *internal.State, cmd *internal.Commands) error {
 	if len(os.Args) < 2 {
-		fmt.Printf("Missing arguments needed to run gator\n\t Usage: cli <command> [args...]\n")
+		fmt.Println("Missing arguments needed to run gator\n\t Usage: cli <command> [args...]")
+		os.Exit(1)
+	} else if _, ok := cmd.Handlers[os.Args[1]]; !ok {
+		fmt.Println("Unknown Command")
 		os.Exit(1)
 	}
 	if len(os.Args) >= 2 {
@@ -28,7 +35,9 @@ func checker(state *internal.State, cmd *internal.Commands) error {
 		Name: os.Args[1],
 		Args: args,
 		}
-		cmd.Run(state, command)
+		if err := cmd.Run(state, command); err != nil {
+			return err
+		}
 		return nil
 	}
 	os.Exit(1)

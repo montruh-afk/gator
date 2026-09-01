@@ -3,9 +3,12 @@ package network
 import (
 	"context"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
+	"os"
 )
 
 
@@ -40,5 +43,38 @@ func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 	<-done
 
 	return feed, nil
+}
+
+func Validateargs(args []string) bool {
+	holdName := make(chan struct{})
+	holdURL := make(chan struct{})
+
+	go validateName(args[0], holdName)
+	go validateURL(args[1], holdURL)
+
+	<-holdName
+	<-holdURL
+	return true
+}
+
+func validateName(name string, hold chan struct{}) error {
+	defer close(hold)
+	_, err := url.ParseRequestURI(name)
+	if err == nil {
+		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url>")
+		os.Exit(1)
+	}
+
+	return nil
+}
+
+func validateURL(Url string, hold chan struct{}) error{
+	defer close(hold)
+	_, err := url.ParseRequestURI(Url)
+	if err != nil {
+   		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url>")
+		os.Exit(1)
+	}
+	return nil
 }
 
