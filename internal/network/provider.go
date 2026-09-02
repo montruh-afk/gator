@@ -7,10 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"time"
 	"os"
+	"time"
 )
-
 
 func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
@@ -21,7 +20,7 @@ func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
-	
+
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -36,7 +35,7 @@ func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 	if err := xml.Unmarshal(data, feed); err != nil {
 		return nil, err
 	}
-	
+
 	done := make(chan struct{})
 	go feed.cleaner(done)
 
@@ -45,36 +44,51 @@ func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 	return feed, nil
 }
 
-func Validateargs(args []string) bool {
-	holdName := make(chan struct{})
-	holdURL := make(chan struct{})
+func Validateargs(caller string, args []string) bool {
+	switch caller {
+	case "Follow":
+		if len(args) != 1 {
+			return false
+		}
+		holdURL := make(chan struct{})
+		go validateURL(args[0], holdURL)
+		<- holdURL
+		return true
+		
+	case "AddFeed":
+		if len(args) != 2 {
+			return false
+		}
+		holdName := make(chan struct{})
+		holdURL := make(chan struct{})
 
-	go validateName(args[0], holdName)
-	go validateURL(args[1], holdURL)
+		go validateName(args[0], holdName)
+		go validateURL(args[1], holdURL)
 
-	<-holdName
-	<-holdURL
-	return true
+		<-holdName
+		<-holdURL
+		return true
+	}
+	return false
 }
 
 func validateName(name string, hold chan struct{}) error {
 	defer close(hold)
 	_, err := url.ParseRequestURI(name)
 	if err == nil {
-		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url>")
+		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url> | follow <feed url> when calling 'follow'")
 		os.Exit(1)
 	}
 
 	return nil
 }
 
-func validateURL(Url string, hold chan struct{}) error{
+func validateURL(Url string, hold chan struct{}) error {
 	defer close(hold)
 	_, err := url.ParseRequestURI(Url)
 	if err != nil {
-   		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url>")
+		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url> | follow <feed url> when calling 'follow'")
 		os.Exit(1)
 	}
 	return nil
 }
-

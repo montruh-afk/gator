@@ -30,10 +30,9 @@ func HandlerLogin(s *State, cmd Command) error {
 		fmt.Println("User not found\n\t", err)
 		os.Exit(1)
 	}
-	fmt.Println("username:", user.Name, "with ID:", user.ID, "already exists")
 
-	if err := s.Configuration.SetUser(username); err != nil {
-		return fmt.Errorf("couldn't set current user: %w\n", err)
+	if err := s.Configuration.SetUser(user.Name); err != nil {
+		return fmt.Errorf("couldn't set current user to %v\n", err)
 	}
 
 	fmt.Println("Welcome", username)
@@ -42,7 +41,7 @@ func HandlerLogin(s *State, cmd Command) error {
 
 func Register(s *State, cmd Command) error {
 	length := len(cmd.Args)
-	
+
 	if length < 1 {
 		return fmt.Errorf("Please provide a valid username\n")
 	} else if length > 1 {
@@ -83,7 +82,7 @@ func Reset(s *State, cmd Command) error {
 	}
 	s.Configuration.Current_user_name = ""
 	fmt.Println("Operation successful")
-	return nil
+	return Write(*s.Configuration)
 }
 
 func Users(s *State, cmd Command) error {
@@ -92,7 +91,9 @@ func Users(s *State, cmd Command) error {
 		fmt.Println("Something went wrong", err)
 		os.Exit(1)
 	}
-
+	if len(users) < 1 {
+		return fmt.Errorf("No users on record\n")
+	}
 	current := s.Configuration.Current_user_name
 	for _, user := range users {
 		if user.Name == current {
@@ -117,14 +118,15 @@ func Agg(s *State, cmd Command) error {
 
 func AddFeed(s *State, cmd Command) error {
 	length := len(cmd.Args)
-	if length < 2 {
-		return fmt.Errorf("Invalid format\n\tUsage: addfeed <feed name> <feed url>\n")
-	} else if network.Validateargs(cmd.Args) {
+	if length != 2 {
+		return fmt.Errorf("Invalid format\n\tUsage: addfeed '<feed name>' '<feed url>'\n")
+	} else if network.Validateargs("AddFeed", cmd.Args) {
 		user, err := s.Db.GetUser(context.Background(), s.Configuration.Current_user_name)
 		if err != nil {
 			return fmt.Errorf("Something went wrong while fetching user details: %v\n", err)
 		}
 		feed := database.CreateFeedParams{
+			ID:        uuid.New(),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 			Name:      cmd.Args[0],
@@ -135,9 +137,110 @@ func AddFeed(s *State, cmd Command) error {
 		if err != nil {
 			return fmt.Errorf("Error adding feed: %v\n", err)
 		}
+
 		fmt.Printf("Operation completed successfully\n\t- Feed name: %s\n\t- Feed URL: %s\n\t- Created at: %v\n\t- Linked to User ID: %v\n", newFeed.Name, newFeed.Url, newFeed.CreatedAt, newFeed.UserID)
+		if err := addFeedFollow(s, cmd); err != nil {
+			return fmt.Errorf("Something broke while attempting to follow %s \nPlease try running 'follow' <feed URL>\n", newFeed.Name)
+		}
 		return nil
 	}
 	return fmt.Errorf("Something went wrong...")
 
+}
+
+func getUserById(s *State, userid uuid.UUID) (*database.User, error) {
+	user, err := s.Db.FetchUser(context.Background(), userid)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+func Feeds(s *State, cmd Command) error {
+	allFeed, err := s.Db.FetchFeeds(context.Background())
+	if err != nil {
+		return fmt.Errorf("Something went wrong: %s\n", err)
+	}
+	for _, feed := range allFeed {
+		user, err := getUserById(s, feed.UserID)
+		if err != nil {
+			continue
+		}
+		fmt.Printf("• %s\n\t- %s Posted by: %s\n", feed.Name, feed.Url, user.Name)
+	}
+	return nil
+}
+
+func Follow(s *State, cmd Command) error {
+	length := len(cmd.Args)
+	if length < 1 {
+		return fmt.Errorf("Invalid format\n\tUsage: follow <feed url>\n")
+	} else if network.Validateargs("Follow", cmd.Args) {
+		userInfo, err := s.Db.GetUser(context.Background(), s.Configuration.Current_user_name)
+		if err != nil {
+			return fmt.Errorf("Something went wrong in authenticating user\n\t -%v\n", err)
+		}
+		feedInfo, err_ := s.Db.GetFeedbyURL(context.Background(), cmd.Args[0])
+		if err_ != nil {
+			return fmt.Errorf("Something broke while fetching results from our records: %v\n", err_)
+		}
+
+		newFollow := database.CreateFeedFollowParams{
+			ID:        uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			UserID:    userInfo.ID,
+			FeedID:    feedInfo.ID,
+		}
+		_, err = s.Db.CreateFeedFollow(context.Background(), newFollow)
+		if err != nil {
+			return fmt.Errorf("Something went wrong on our end: %v\n", err)
+		}
+		fmt.Printf("%s is now following %s\n", s.Configuration.Current_user_name, feedInfo.Name)
+		return nil
+	}
+	return fmt.Errorf("Something went wrong...\n")
+}
+
+func addFeedFollow(s *State, cmd Command) error {
+	if network.Validateargs("AddFeed", cmd.Args) {
+		userInfo, err := s.Db.GetUser(context.Background(), s.Configuration.Current_user_name)
+		if err != nil {
+			return fmt.Errorf("Something went wrong in authenticating user\n\t -%v\n", err)
+		}
+		feedInfo, err_ := s.Db.GetFeedbyURL(context.Background(), cmd.Args[1])
+		if err_ != nil {
+			return fmt.Errorf("Something broke while fetching results from our records: %v\n", err_)
+		}
+
+		newFollow := database.CreateFeedFollowParams{
+			ID:        uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			UserID:    userInfo.ID,
+			FeedID:    feedInfo.ID,
+		}
+		_, err = s.Db.CreateFeedFollow(context.Background(), newFollow)
+		if err != nil {
+			return fmt.Errorf("Something went wrong on our end: %v\n", err)
+		}
+		fmt.Printf("%s is now following %s\n", s.Configuration.Current_user_name, feedInfo.Name)
+		return nil
+	}
+	return fmt.Errorf("Something broke while attempting to follow %s\n", cmd.Args[0])
+}
+
+func Following(s *State, cmd Command) error {
+	if len(cmd.Args) > 0 {
+		return fmt.Errorf("Invalid format\n\t following takes no arguments\n")
+	}
+	user := s.Configuration.Current_user_name
+	follows, err := s.Db.GetUserFollows(context.Background(), user)
+	if err != nil {
+		return fmt.Errorf("Something went wrong in fetching results: %v\n", err)
+	}
+	fmt.Println(user, "is currently following")
+	for _, follow := range follows {
+		fmt.Printf("\t- %s\n", follow.FeedName)
+	}
+	return nil
 }

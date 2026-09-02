@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-
 	"github.com/montruh-afk/gator/internal"
 )
 
@@ -15,6 +14,9 @@ func start(state *internal.State, cmd *internal.Commands) {
 	cmd.Register("users", internal.Users)
 	cmd.Register("agg", internal.Agg)
 	cmd.Register("addfeed", internal.AddFeed)
+	cmd.Register("feeds", internal.Feeds)
+	cmd.Register("follow", internal.Follow)
+	cmd.Register("following", internal.Following)
 	if err := checker(state, cmd); err != nil {
 		fmt.Print(err)
 		os.Exit(1)
@@ -44,3 +46,4 @@ func checker(state *internal.State, cmd *internal.Commands) error {
 	return nil
 	
 }
+
