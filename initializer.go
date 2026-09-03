@@ -13,10 +13,10 @@ func start(state *internal.State, cmd *internal.Commands) {
 	cmd.Register("reset", internal.Reset)
 	cmd.Register("users", internal.Users)
 	cmd.Register("agg", internal.Agg)
-	cmd.Register("addfeed", internal.AddFeed)
+	cmd.Register("addfeed", middlewareLoggedIn(internal.AddFeed))
 	cmd.Register("feeds", internal.Feeds)
-	cmd.Register("follow", internal.Follow)
-	cmd.Register("following", internal.Following)
+	cmd.Register("follow", middlewareLoggedIn(internal.Follow))
+	cmd.Register("following", middlewareLoggedIn(internal.Following))
 	if err := checker(state, cmd); err != nil {
 		fmt.Print(err)
 		os.Exit(1)
