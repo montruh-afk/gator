@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"time"
+	"github.com/montruh-afk/gator/internal/database"
 )
 
 func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
@@ -68,15 +69,49 @@ func Validateargs(caller string, args []string) bool {
 		<-holdName
 		<-holdURL
 		return true
+	
+	case "UnFollow":
+		if len(args) != 1 {
+			return false
+		}
+		holdURL := make(chan struct{})
+		go validateURL(args[0], holdURL)
+		<- holdURL
+		return true	
 	}
 	return false
+}
+
+func ScrapeFeeds(s *database.Queries) error {
+	feed, err := s.GetNextFeed(context.Background())
+	if err != nil {
+		return fmt.Errorf("Something broke on our end: %w\n", err)
+	}
+	if err := s.MarkFeed(context.Background(), feed.ID); err != nil {
+		return fmt.Errorf("Something went wrong: %w\n", err)
+	}
+
+	hold := make(chan struct{})
+	go validateURL(feed.Url, hold)
+	<-hold
+	feeds, err := Fetchfeed(context.Background(), feed.Url)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\nFound %v titles\n", len(feeds.Channel.Item))
+	for _, feed := range feeds.Channel.Item {
+		fmt.Println("\t•", feed.Title)
+	}
+	return nil
+
 }
 
 func validateName(name string, hold chan struct{}) error {
 	defer close(hold)
 	_, err := url.ParseRequestURI(name)
 	if err == nil {
-		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url> | follow <feed url> when calling 'follow'")
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
@@ -87,7 +122,7 @@ func validateURL(Url string, hold chan struct{}) error {
 	defer close(hold)
 	_, err := url.ParseRequestURI(Url)
 	if err != nil {
-		fmt.Println("Invalid format\n\tUsage: addfeed <feed name> <feed url> | follow <feed url> when calling 'follow'")
+		fmt.Println(err)
 		os.Exit(1)
 	}
 	return nil

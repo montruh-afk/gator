@@ -3,11 +3,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/montruh-afk/gator/internal/database"
 	"github.com/montruh-afk/gator/internal/network"
-	"os"
-	"time"
 )
 
 type Command struct {
@@ -108,12 +109,19 @@ func Users(s *State, cmd Command) error {
 }
 
 func Agg(s *State, cmd Command) error {
-	feed, err := network.Fetchfeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return err
+	if len(cmd.Args) != 1 {
+		return fmt.Errorf("Invalid format\n\tUsage: agg <time period> e.g 1m, 1h, 300ms... this is how frequent the feeds will be updated.\n")
 	}
-	fmt.Println(feed)
-	return nil
+	time_between_reqs := cmd.Args[0]
+	reqs, err := time.ParseDuration(time_between_reqs)
+	if err != nil {
+		return fmt.Errorf("Invalid duration %w\n", err)
+	}
+	fmt.Printf("Collecting feeds every %s...\n", time_between_reqs)
+	ticker := time.NewTicker(reqs)
+	for ; ; <-ticker.C {
+		network.ScrapeFeeds(s.Db)
+	}
 }
 
 func AddFeed(s *State, cmd Command, user database.User) error {
@@ -225,9 +233,34 @@ func Following(s *State, cmd Command, user database.User) error {
 	if err != nil {
 		return fmt.Errorf("Something went wrong in fetching results: %v\n", err)
 	}
-	fmt.Println(user.Name, "is currently following")
-	for _, follow := range follows {
-		fmt.Printf("\t- %s\n", follow.FeedName)
+	if len(follows) < 1 {
+		fmt.Println("You are not keeping up with any feeds at the moment.")
+	} else {
+		fmt.Println(user.Name, "is currently following")
+		for _, follow := range follows {
+			fmt.Printf("\t- %s\n", follow.FeedName)
+		}
+	}
+
+	return nil
+}
+
+func UnFollow(s *State, cmd Command, user database.User) error {
+	if len(cmd.Args) < 1 {
+		return fmt.Errorf("Invalid format, please provide a valid url\n\t Usage: unfollow <url>\n")
+	} else if network.Validateargs("UnFollow", cmd.Args) {
+		feed, err := s.Db.GetFeedbyURL(context.Background(), cmd.Args[0])
+		if err != nil {
+			return err
+		}
+		unFollowParams := database.UnfollowParams{
+			UserID: user.ID,
+			FeedID: feed.ID,
+		}
+		if err := s.Db.Unfollow(context.Background(), unFollowParams); err != nil {
+			return fmt.Errorf("Something went wrong: %w\n", err)
+		}
+		fmt.Printf("You are no longer following %s at %s\n", feed.Name, feed.Url)
 	}
 	return nil
 }
