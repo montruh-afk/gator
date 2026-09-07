@@ -2,14 +2,19 @@ package network
 
 import (
 	"context"
+	"database/sql"
 	"encoding/xml"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/montruh-afk/gator/internal/database"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
+	"sync"
 	"time"
-	"github.com/montruh-afk/gator/internal/database"
 )
 
 func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
@@ -46,69 +51,119 @@ func Fetchfeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 }
 
 func Validateargs(caller string, args []string) bool {
+	var wg sync.WaitGroup
 	switch caller {
 	case "Follow":
 		if len(args) != 1 {
 			return false
 		}
-		holdURL := make(chan struct{})
-		go validateURL(args[0], holdURL)
-		<- holdURL
+		wg.Add(1)
+		validateURL(args[0], &wg)
 		return true
-		
+
 	case "AddFeed":
 		if len(args) != 2 {
 			return false
 		}
-		holdName := make(chan struct{})
-		holdURL := make(chan struct{})
-
-		go validateName(args[0], holdName)
-		go validateURL(args[1], holdURL)
-
-		<-holdName
-		<-holdURL
+		wg.Add(2)
+		go validateName(args[0], &wg)
+		go validateURL(args[1], &wg)
+		wg.Wait()
 		return true
-	
+
 	case "UnFollow":
 		if len(args) != 1 {
 			return false
 		}
-		holdURL := make(chan struct{})
-		go validateURL(args[0], holdURL)
-		<- holdURL
-		return true	
+		wg.Add(1)
+		validateURL(args[0], &wg)
+		return true
 	}
 	return false
 }
 
+func concurrentPost(s *database.Queries, feedID uuid.UUID, feed *RSSItem) {
+	now := time.Now()
+	post := database.CreatePostParams{
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+		Title:     feed.Title,
+		Url:       feed.Link,
+		FeedID:    feedID,
+	}
+
+	getdescription(&post, feed)
+	parseTime(&post, feed)
+
+	res, err := s.CreatePost(context.Background(), post)
+	if err != nil {
+		if !strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+			log.Printf("Couldn't create post: %v", err)
+		}
+		return
+	}
+	fmt.Println("Added Title •", res.Title)
+
+}
+
+func getdescription(post *database.CreatePostParams, feed *RSSItem) {
+	desc := sql.NullString{
+		String: feed.Description,
+		Valid:  feed.Description != "",
+	}
+	post.Description = desc
+}
+
+func parseTime(post *database.CreatePostParams, feed *RSSItem) {
+
+	var pubdate time.Time
+	var err error
+
+	pubdate, err = time.Parse(time.RFC1123Z, feed.PubDate)
+	if err != nil {
+		pubdate, err = time.Parse(time.RFC1123, feed.PubDate)
+	}
+	if err != nil {
+		log.Printf("Something went wrong while attempting to set Publish Date for title: %s\n\t %v\n", feed.Title, err)
+		return
+	}
+	post.PublishedAt = sql.NullTime{
+		Time:  pubdate,
+		Valid: true,
+	}
+}
+
 func ScrapeFeeds(s *database.Queries) error {
-	feed, err := s.GetNextFeed(context.Background())
+	parentFeed, err := s.GetNextFeed(context.Background())
 	if err != nil {
 		return fmt.Errorf("Something broke on our end: %w\n", err)
 	}
-	if err := s.MarkFeed(context.Background(), feed.ID); err != nil {
+	if err := s.MarkFeed(context.Background(), parentFeed.ID); err != nil {
 		return fmt.Errorf("Something went wrong: %w\n", err)
 	}
 
-	hold := make(chan struct{})
-	go validateURL(feed.Url, hold)
-	<-hold
-	feeds, err := Fetchfeed(context.Background(), feed.Url)
+	feeds, err := Fetchfeed(context.Background(), parentFeed.Url)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("\nFound %v titles\n", len(feeds.Channel.Item))
-	for _, feed := range feeds.Channel.Item {
-		fmt.Println("\t•", feed.Title)
-	}
-	return nil
+	var wg sync.WaitGroup
+	for i := range feeds.Channel.Item {
+		wg.Add(1)
 
+		go func() {
+			wg.Done()
+			concurrentPost(s, parentFeed.ID, &feeds.Channel.Item[i])
+		}()
+
+	}
+	wg.Wait()
+	return nil
 }
 
-func validateName(name string, hold chan struct{}) error {
-	defer close(hold)
+func validateName(name string, wg *sync.WaitGroup) error {
+	defer wg.Done()
 	_, err := url.ParseRequestURI(name)
 	if err == nil {
 		fmt.Println(err)
@@ -118,8 +173,8 @@ func validateName(name string, hold chan struct{}) error {
 	return nil
 }
 
-func validateURL(Url string, hold chan struct{}) error {
-	defer close(hold)
+func validateURL(Url string, wg *sync.WaitGroup) error {
+	defer wg.Done()
 	_, err := url.ParseRequestURI(Url)
 	if err != nil {
 		fmt.Println(err)

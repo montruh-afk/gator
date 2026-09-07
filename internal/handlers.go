@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"time"
-
+	"strconv"
 	"github.com/google/uuid"
 	"github.com/montruh-afk/gator/internal/database"
 	"github.com/montruh-afk/gator/internal/network"
@@ -261,6 +261,43 @@ func UnFollow(s *State, cmd Command, user database.User) error {
 			return fmt.Errorf("Something went wrong: %w\n", err)
 		}
 		fmt.Printf("You are no longer following %s at %s\n", feed.Name, feed.Url)
+	}
+	return nil
+}
+
+func Browse(s *State, cmd Command, user database.User) error {
+	var limit int
+
+	//defaults to 2
+	limit = 2
+
+	if len(cmd.Args) >= 1 {
+		val, err := strconv.Atoi(cmd.Args[0])
+		if err != nil {
+			return fmt.Errorf("Please provide a valid number to limit result by: %w\n", err)
+		}
+		limit = val
+	}
+
+	posts, err := s.Db.GetPosts(context.Background(), database.GetPostsParams{
+		UserID: user.ID,
+		Limit: int32(limit),
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println("Fetching posts...")
+	if len(posts) < 1 {
+		fmt.Println("You are not following any feeds")
+		return nil
+	}
+	for _, post := range posts {
+		if post.Description.Valid {
+			fmt.Printf("- %s @ %s\n\t• %s\n", post.Title, post.Url, post.Description.String)
+		} else {
+			fmt.Printf("- %s @ %s\n", post.Title, post.Url)
+		}
+		
 	}
 	return nil
 }

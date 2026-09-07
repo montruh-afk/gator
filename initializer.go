@@ -18,6 +18,7 @@ func start(state *internal.State, cmd *internal.Commands) {
 	cmd.Register("follow", middlewareLoggedIn(internal.Follow))
 	cmd.Register("following", middlewareLoggedIn(internal.Following))
 	cmd.Register("unfollow", middlewareLoggedIn(internal.UnFollow))
+	cmd.Register("browse", middlewareLoggedIn(internal.Browse))
 	if err := checker(state, cmd); err != nil {
 		fmt.Print(err)
 		os.Exit(1)
